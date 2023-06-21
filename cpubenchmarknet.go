@@ -11,11 +11,10 @@ import (
 	"time"
 )
 
-// extractPHPSESSID visits cpubenchmark.net, extracts
-// value of `PHPSESSID` cookie, and returns it.
-func extractPHPSESSID() (string, error) {
-	cookieName := "PHPSESSID"
-	resp, err := http.Get("https://cpubenchmark.net/CPU_mega_page.html")
+// extractCookie visits a URL, extracts
+// a cookie, and returns its value if it exists.
+func extractCookie(url string, cookieName string) (string, error) {
+	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}
@@ -27,21 +26,9 @@ func extractPHPSESSID() (string, error) {
 	return "", fmt.Errorf("%s cookie not found", cookieName)
 }
 
-// GetCPUMegaList downloads CPU Mega List from cpubenchmark.net and returns its contents.
-func GetCPUMegaList() (string, error) {
-	PHPSESSID, err := extractPHPSESSID()
-	if err != nil {
-		return "", err
-	}
-
-	timeNowMilli := time.Now().UnixMilli()
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://cpubenchmark.net/data/?_=%d", timeNowMilli), nil)
-	req.Header.Set("X-Requested-With", "XMLHttpRequest")
-	req.AddCookie(&http.Cookie{
-		Name:  "PHPSESSID",
-		Value: PHPSESSID,
-	})
-
+// getJSONString sends a HTTP request and returns
+// its body as string if it is valid JSON.
+func getJSONString(req *http.Request) (string, error) {
 	var client http.Client
 	resp, err := client.Do(req)
 	if err != nil {
@@ -54,7 +41,26 @@ func GetCPUMegaList() (string, error) {
 		return "", err
 	}
 	if !json.Valid(b) {
-		return "", errors.New("HTTP Response is not valid JSON")
+		return "", errors.New("HTTP Response Body is not valid JSON")
 	}
 	return string(b), nil
+}
+
+// GetCPUMegaList downloads CPU Mega List from cpubenchmark.net and returns its contents.
+func GetCPUMegaList() (string, error) {
+	cookieName := "PHPSESSID"
+	cookieValue, err := extractCookie("https://cpubenchmark.net/CPU_mega_page.html", cookieName)
+	if err != nil {
+		return "", err
+	}
+
+	timeNowMilli := time.Now().UnixMilli()
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://cpubenchmark.net/data/?_=%d", timeNowMilli), nil)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.AddCookie(&http.Cookie{
+		Name:  cookieName,
+		Value: cookieValue,
+	})
+
+	return getJSONString(req)
 }
