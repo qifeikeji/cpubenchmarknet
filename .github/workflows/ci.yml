@@ -6,32 +6,45 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT }} # 如果需要推送更改
 
       - name: Format Markdown with markdownlint
         run: |
           npm install -g markdownlint-cli
           markdownlint --disable MD013 MD033 --fix . --ignore CODE_OF_CONDUCT.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --exit-code
+          git commit -m "Auto-format Markdown files" || echo "No changes to commit"
+          git push || echo "No push needed"
+
   test-and-coverage:
     strategy:
       matrix:
         os: [macos-latest, windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-    - name: Check out repository
-      uses: actions/checkout@v4
-    - name: Setup go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: './go.mod'
-    - name: Test
-      run: make tests
-    - name: Convert Go coverage to lcov
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        go install github.com/jandelgado/gcov2lcov@latest
-        gcov2lcov -infile=coverage.out -outfile=coverage.lcov
-    - name: Upload coverage to Coveralls
-      if: matrix.os == 'ubuntu-latest'
-      uses: coverallsapp/github-action@v2
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: './go.mod'
+
+      - name: Test
+        run: go test -v -coverprofile=coverage.out ./...
+
+      - name: Convert Go coverage to lcov
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          go install github.com/jandelgado/gcov2lcov@latest
+          gcov2lcov -infile=coverage.out -outfile=coverage.lcov
+
+      - name: Upload coverage to Coveralls
+        if: matrix.os == 'ubuntu-latest'
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: ./coverage.lcov
